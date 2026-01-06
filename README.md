@@ -18,6 +18,8 @@ Doing this manually or on a server is inefficient. This project solves it **auto
 
 ## 🧠 High-Level Architecture
 
+<img src="screenshot/resize_fun.png" alt="Image Resize Lambda Screenshot" width="700"/>
+
 1. User uploads an image to an S3 bucket
 2. S3 triggers a Lambda function
 3. Lambda uses Pillow to resize the image
