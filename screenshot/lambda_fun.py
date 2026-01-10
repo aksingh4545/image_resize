@@ -9,7 +9,7 @@ s3 = boto3.client("s3")
 DEST_BUCKET = "image-resize-result45"
 
 
-SIZE = (300, 300) 
+SIZE = (300, 300)  
 
 def lambda_handler(event, context):
 
