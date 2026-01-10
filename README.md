@@ -1,250 +1,231 @@
-# 🖼️ Serverless Image Resizing using AWS Lambda & Pillow
+<h1>🖼️ Serverless Image Resizing with AWS Lambda, Pillow, and SNS</h1>
 
-This project demonstrates how to automatically resize images uploaded to Amazon S3 using **AWS Lambda**, **Pillow (PIL)**, and **Lambda Layers**. It is designed to be beginner-friendly while also explaining advanced concepts used in real-world production systems.
+<p>
+This project implements an event-driven, serverless image processing pipeline on AWS.
+Images uploaded to Amazon S3 are automatically resized using AWS Lambda and Pillow,
+stored in a destination bucket, and followed by an email notification using Amazon SNS.
+</p>
 
----
+<hr />
 
-## 📌 What Problem Does This Solve?
+<h2>📌 Problem Statement</h2>
+<p>
+Applications that accept user-uploaded images often need standardized image sizes
+for thumbnails, profile photos, or product listings.
+Handling this on traditional servers increases operational overhead and cost.
+</p>
 
-When users upload images (profile photos, product images, documents), we often need:
+<p>
+This project solves the problem using a fully serverless approach:
+</p>
 
-* Smaller thumbnails
-* Standardized dimensions
-* Optimized image formats
+<ul>
+  <li>Automatic image resizing on upload</li>
+  <li>No servers or background workers to manage</li>
+  <li>Instant notification once processing is complete</li>
+</ul>
 
-Doing this manually or on a server is inefficient. This project solves it **automatically and serverlessly**.
+<hr />
 
----
+<h2>🧠 High-Level Architecture</h2>
+<ol>
+  <li>User uploads an image to an S3 bucket</li>
+  <li>S3 triggers an AWS Lambda function</li>
+  <li>Lambda resizes the image using Pillow (via a Lambda Layer)</li>
+  <li>Resized image is saved to a destination S3 bucket</li>
+  <li>Lambda publishes a notification to an SNS topic</li>
+</ol>
 
-## 🧠 High-Level Architecture
+<p>
+This design follows an event-driven, cloud-native architecture.
+</p>
 
-<img src="screenshot/resize_fun.png" alt="Image Resize Lambda Screenshot" width="700"/>
+<hr />
 
-1. User uploads an image to an S3 bucket
-2. S3 triggers a Lambda function
-3. Lambda uses Pillow to resize the image
-4. Resized image is saved to another S3 bucket
+<h2>🧰 Tech Stack</h2>
+<ul>
+  <li><strong>AWS S3</strong> – Image storage and event source</li>
+  <li><strong>AWS Lambda</strong> – Serverless compute</li>
+  <li><strong>Python 3.10 / 3.11</strong> – Runtime</li>
+  <li><strong>Pillow (PIL)</strong> – Image processing</li>
+  <li><strong>Lambda Layer</strong> – Dependency packaging</li>
+  <li><strong>AWS SNS</strong> – Email notifications</li>
+</ul>
 
-No servers. No manual steps.
+<hr />
 
----
+<h2>📁 S3 Buckets</h2>
+<table>
+  <tr>
+    <th>Purpose</th>
+    <th>Bucket Name</th>
+  </tr>
+  <tr>
+    <td>Input images</td>
+    <td><code>image-resize-input45</code></td>
+  </tr>
+  <tr>
+    <td>Resized images</td>
+    <td><code>image-resize-result45</code></td>
+  </tr>
+  <tr>
+    <td>Backup originals</td>
+    <td><code>image-resize-backup45</code></td>
+  </tr>
+</table>
 
-## 🧰 Tech Stack
+<hr />
 
-* **AWS S3** – Image storage and event trigger
-* **AWS Lambda** – Serverless compute
-* **Python 3.10 / 3.11** – Runtime
-* **Pillow (PIL)** – Image processing
-* **Lambda Layer** – Dependency management
+<h2>❓ Why Pillow and Lambda Layers</h2>
+<p>
+AWS Lambda does not include Pillow by default.
+Since Pillow depends on native system libraries, it must be packaged separately.
+</p>
 
----
+<p>
+A Lambda Layer is used to:
+</p>
+<ul>
+  <li>Package Pillow correctly for Amazon Linux</li>
+  <li>Keep Lambda function code clean</li>
+  <li>Reuse the dependency across functions</li>
+</ul>
 
-## 📁 S3 Buckets Used
+<p>
+Lambda automatically mounts layers at:
+</p>
+<pre><code>/opt/python/</code></pre>
 
-| Purpose        | Bucket Name             |
-| -------------- | ----------------------- |
-| Input images   | `image-resize-input45`  |
-| Resized images | `image-resize-result45` |
+<hr />
 
----
+<h2>🛠️ Creating the Pillow Layer (AWS CloudShell)</h2>
+<p>
+Pillow must be built on Amazon Linux. Use AWS CloudShell:
+</p>
 
-## ❓ What is Pillow?
-
-**Pillow** is a Python image-processing library.
-
-It allows you to:
-
-* Open images (JPG, PNG)
-* Resize, crop, rotate images
-* Convert formats (PNG → JPEG)
-
-AWS Lambda does **not** include Pillow by default, which is why we use a **Lambda Layer**.
-
----
-
-## ❓ What is a Lambda Layer and Why Do We Need It?
-
-A **Lambda Layer** is a separate package that contains dependencies your Lambda function needs.
-
-Why we use it:
-
-* Pillow has native C extensions
-* Lambda does not allow `pip install` at runtime
-* Layers keep code clean and reusable
-
-Lambda mounts layers at:
-
-```
-/opt/python/
-```
-
-This is why `from PIL import Image` works.
-
----
-
-## 🛠️ Creating the Pillow Layer (CloudShell)
-
-> Important: Pillow must be built on **Amazon Linux** (CloudShell), not Windows.
-
-```bash
+<pre><code>
 mkdir pillow-layer
 cd pillow-layer
 mkdir python
 pip3 install pillow==10.2.0 -t python/
 zip -r pillow-layer.zip python
-```
+</code></pre>
 
-Upload `pillow-layer.zip` as a Lambda Layer and match the Python runtime.
+<p>
+Upload <code>pillow-layer.zip</code> as a Lambda Layer and attach it to your function.
+</p>
 
----
+<hr />
 
-## 🧪 Lambda Function Code (Fully Explained)
+<h2>🧪 Lambda Function Overview</h2>
+<p>
+The Lambda function performs the following steps:
+</p>
 
-```python
-import boto3
-from PIL import Image
-from io import BytesIO
-import os
+<ul>
+  <li>Reads the uploaded image from S3</li>
+  <li>Backs up the original image</li>
+  <li>Resizes the image using Pillow</li>
+  <li>Saves the resized image to a destination bucket</li>
+  <li>Sends a notification using SNS</li>
+</ul>
 
-s3 = boto3.client("s3")
+<hr />
 
-DEST_BUCKET = "image-resize-result45"
-SIZE = (300, 300)
+<h2>🔍 Key Concepts Used</h2>
+<ul>
+  <li>Event-driven architecture</li>
+  <li>Serverless compute</li>
+  <li>In-memory file processing</li>
+  <li>Native dependency packaging</li>
+  <li>Asynchronous notifications with SNS</li>
+</ul>
 
-def lambda_handler(event, context):
+<hr />
 
-    for record in event["Records"]:
-        src_bucket = record["s3"]["bucket"]["name"]
-        src_key = record["s3"]["object"]["key"]
+<h2>⚙️ Lambda Configuration</h2>
+<table>
+  <tr>
+    <th>Setting</th>
+    <th>Recommended Value</th>
+  </tr>
+  <tr>
+    <td>Runtime</td>
+    <td>Python 3.10 / 3.11</td>
+  </tr>
+  <tr>
+    <td>Memory</td>
+    <td>512 MB</td>
+  </tr>
+  <tr>
+    <td>Timeout</td>
+    <td>15 seconds</td>
+  </tr>
+</table>
 
-        if src_key.endswith("/") or not src_key.lower().endswith((".jpg", ".jpeg", ".png")):
-            continue
+<hr />
 
-        response = s3.get_object(Bucket=src_bucket, Key=src_key)
-        image_data = response["Body"].read()
+<h2>🔐 IAM Permissions</h2>
+<p>
+The Lambda execution role requires the following permissions:
+</p>
 
-        img = Image.open(BytesIO(image_data))
-        img = img.convert("RGB")
-        img.thumbnail(SIZE)
-
-        buffer = BytesIO()
-        img.save(buffer, format="JPEG")
-        buffer.seek(0)
-
-        dest_key = f"resized/{os.path.basename(src_key)}"
-
-        s3.put_object(
-            Bucket=DEST_BUCKET,
-            Key=dest_key,
-            Body=buffer,
-            ContentType="image/jpeg"
-        )
-
-    return {
-        "statusCode": 200,
-        "body": "Image resized successfully"
-    }
-```
-
----
-
-## 🔍 Code Breakdown (Beginner-Friendly)
-
-* `boto3` → Communicates with AWS services
-* `BytesIO` → Handles images in memory (no disk)
-* `thumbnail()` → Resizes while maintaining aspect ratio
-* `os.path.basename()` → Extracts filename safely
-
----
-
-## ⚙️ Lambda Configuration
-
-Recommended settings:
-
-| Setting | Value              |
-| ------- | ------------------ |
-| Runtime | Python 3.10 / 3.11 |
-| Memory  | 512 MB             |
-| Timeout | 15 seconds         |
-
----
-
-## 🔐 IAM Permissions Required
-
-Lambda execution role must allow:
-
-```json
+<pre><code>
 {
   "Effect": "Allow",
-  "Action": ["s3:GetObject", "s3:PutObject"],
+  "Action": [
+    "s3:GetObject",
+    "s3:PutObject",
+    "sns:Publish"
+  ],
   "Resource": [
     "arn:aws:s3:::image-resize-input45/*",
-    "arn:aws:s3:::image-resize-result45/*"
+    "arn:aws:s3:::image-resize-result45/*",
+    "arn:aws:s3:::image-resize-backup45/*",
+    "arn:aws:sns:ap-south-1:ACCOUNT_ID:image-resize-notification"
   ]
 }
-```
+</code></pre>
 
----
+<hr />
 
-## 🚨 Common Errors and Fixes
+<h2>🚨 Common Issues</h2>
+<ul>
+  <li><strong>No module named PIL</strong> – Pillow layer not attached</li>
+  <li><strong>_imaging import error</strong> – Layer built for wrong Python version</li>
+  <li><strong>Lambda not triggered</strong> – S3 event notification missing</li>
+  <li><strong>SNS publish denied</strong> – Missing <code>sns:Publish</code> permission</li>
+</ul>
 
-### ❌ `No module named PIL`
+<hr />
 
-➡️ Pillow layer not attached
+<h2>🚀 Real-World Use Cases</h2>
+<ul>
+  <li>User profile photo processing</li>
+  <li>E-commerce product image resizing</li>
+  <li>CMS image optimization pipelines</li>
+  <li>Media processing workflows with alerts</li>
+</ul>
 
-### ❌ `_imaging` import error
+<hr />
 
-➡️ Pillow built for wrong Python version
+<h2>📈 Possible Enhancements</h2>
+<ul>
+  <li>Multiple output sizes</li>
+  <li>Preserve original image format</li>
+  <li>Watermarking</li>
+  <li>EXIF auto-rotation</li>
+  <li>CloudFront CDN integration</li>
+</ul>
 
-### ❌ Nothing happens on upload
+<hr />
 
-➡️ S3 trigger missing or misconfigured
+<h2>✅ Summary</h2>
+<p>
+This project demonstrates a clean, production-ready approach to serverless image processing on AWS.
+It combines S3, Lambda, Pillow, and SNS into a scalable, low-maintenance pipeline suitable for real systems.
+</p>
 
----
-
-## 🧠 Advanced Concepts Used
-
-* Event-driven architecture
-* Serverless compute
-* Native dependency packaging
-* Memory-based file processing
-* Cloud-native image pipelines
-
----
-
-## 🚀 Real-World Use Cases
-
-* Profile photo resizing
-* E-commerce product thumbnails
-* CMS image optimization
-* Media processing pipelines
-
----
-
-## 📈 Possible Enhancements
-
-* Multiple image sizes
-* Preserve original image format
-* Watermarking
-* EXIF auto-rotation
-* CloudFront CDN integration
-
----
-
-## ✅ Final Summary
-
-This project shows how to build a **production-ready, serverless image processing pipeline** using AWS services.
-
-It covers both **beginner concepts** and **advanced AWS patterns** used in real systems.
-
----
-
-## 👤 Author
-
-Built as a learning + production-ready project.
-
-If you're new to AWS, this project gives you strong fundamentals.
-
----
-
-Happy building 🚀
+<p>
+Built as a learning-focused yet production-aligned implementation.
+</p>
