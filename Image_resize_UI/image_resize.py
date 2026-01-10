@@ -23,7 +23,7 @@ option = st.radio(
     ["Resize Image", "Get Original Image Back"]
 )
 
-# 👉 Show resize options ONLY for resize
+# Show resize options ONLY for resize
 if option == "Resize Image":
     st.subheader("Resize Options")
 
