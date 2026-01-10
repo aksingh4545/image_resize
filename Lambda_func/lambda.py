@@ -6,7 +6,7 @@ import os
 s3 = boto3.client("s3")
 sns = boto3.client("sns")
 
-SNS_TOPIC_ARN = "arn:aws:sns:ap-south-1:077657726828:image-resize-notification"
+SNS_TOPIC_ARN = " "
 
 RESULT_BUCKET = "image-resize-result45"
 BACKUP_BUCKET = "image-resize-backup45"
